@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Play, Square, RefreshCw, Trophy, Users, RotateCcw, Upload } from 'lucide-react';
+import { Play, Square, RefreshCw, Trophy, Users, RotateCcw, Upload, ArrowLeft } from 'lucide-react';
 import { useSocket } from '../hooks/useSocket';
 import { eventApi, categoryApi, participantApi, drawingApi } from '../services/api';
 import { emitCategoryChange, emitDrawingStart, emitDrawingRoll, emitWinnerSelected } from '../services/socket';
@@ -7,9 +7,10 @@ import type { Event, PrizeCategory, Participant } from '../types';
 
 interface ControlPageProps {
   eventId: number;
+  onBack: () => void;
 }
 
-export function ControlPage({ eventId }: ControlPageProps) {
+export function ControlPage({ eventId, onBack }: ControlPageProps) {
   const { isConnected, winners } = useSocket(eventId);
 
   const [event, setEvent] = useState<Event | null>(null);
@@ -20,7 +21,6 @@ export function ControlPage({ eventId }: ControlPageProps) {
   const [isRolling, setIsRolling] = useState(false);
 
   const rollingInterval = useRef<number | null>(null);
-  const rollingTimeout = useRef<number | null>(null);
 
   // Load data
   useEffect(() => {
@@ -78,7 +78,7 @@ export function ControlPage({ eventId }: ControlPageProps) {
     setIsRolling(true);
     emitDrawingStart(eventId, selectedCategory);
 
-    // Rolling animation
+    // Rolling animation - continues until manual STOP
     rollingInterval.current = window.setInterval(() => {
       const count = selectedCategory.winner_count;
       const shuffled = [...eligible].sort(() => Math.random() - 0.5);
@@ -89,19 +89,12 @@ export function ControlPage({ eventId }: ControlPageProps) {
       }));
       emitDrawingRoll(eventId, rolling);
     }, 100);
-
-    // Auto stop after 3-5 seconds
-    const duration = 3000 + Math.random() * 2000;
-    rollingTimeout.current = window.setTimeout(() => {
-      handleStopDrawing();
-    }, duration);
   };
 
   const handleStopDrawing = async () => {
     if (!selectedCategory) return;
 
     if (rollingInterval.current) clearInterval(rollingInterval.current);
-    if (rollingTimeout.current) clearTimeout(rollingTimeout.current);
 
     try {
       const response = await drawingApi.selectWinners(eventId, selectedCategory.id);
@@ -117,12 +110,6 @@ export function ControlPage({ eventId }: ControlPageProps) {
     } finally {
       setIsRolling(false);
     }
-  };
-
-  const handleForceStop = () => {
-    if (rollingInterval.current) clearInterval(rollingInterval.current);
-    if (rollingTimeout.current) clearTimeout(rollingTimeout.current);
-    setIsRolling(false);
   };
 
   const handleReroll = async (winnerId: number) => {
@@ -158,28 +145,52 @@ export function ControlPage({ eventId }: ControlPageProps) {
       alert(`Berhasil import ${res.data.imported_count} peserta`);
       const participantsRes = await participantApi.getAll(eventId);
       setParticipants(participantsRes.data);
-    } catch (error) {
+    } catch {
       alert('Gagal import');
     }
   };
 
   if (isLoading) {
-    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+    return <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]">Loading...</div>;
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="font-bold text-lg">{event?.name}</h1>
+    <div className="min-h-screen bg-[#F8FAFC]">
+      {/* Header with Banner */}
+      <div className="bg-white shadow-sm border-b border-[#E2E8F0]">
+        {/* Banner - Small */}
+        <div className="h-24 bg-gradient-to-r from-[#3B82F6] to-[#22C55E] flex items-center justify-center relative overflow-hidden">
+          <img 
+            src="/images/banner-event.png" 
+            alt="Event Banner"
+            className="absolute inset-0 w-full h-full object-cover"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none';
+            }}
+          />
+          <div className="relative z-10 text-white text-center">
+            <h1 className="text-2xl font-bold drop-shadow-lg">{event?.name}</h1>
+          </div>
+        </div>
+        
+        {/* Header Controls */}
+        <div className="p-4 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={onBack}
+              className="flex items-center gap-2 px-4 py-2 text-[#1E293B] hover:bg-[#F8FAFC] rounded-lg transition"
+            >
+              <ArrowLeft className="w-5 h-5" />
+              Kembali
+            </button>
+            
             <div className="flex items-center gap-2 text-sm">
-              <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
-              <span className="text-gray-500">{isConnected ? 'Connected' : 'Disconnected'}</span>
+              <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-[#22C55E]' : 'bg-[#EF4444]'}`} />
+              <span className="text-[#64748B]">{isConnected ? 'Connected' : 'Disconnected'}</span>
             </div>
           </div>
-          <label className="cursor-pointer px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg flex items-center gap-2 text-sm">
+          
+          <label className="cursor-pointer px-3 py-2 bg-[#F8FAFC] hover:bg-[#E2E8F0] rounded-lg flex items-center gap-2 text-sm transition">
             <Upload className="w-4 h-4" />
             Import
             <input type="file" accept=".csv,.xlsx,.xls" onChange={handleImport} className="hidden" />
@@ -190,8 +201,8 @@ export function ControlPage({ eventId }: ControlPageProps) {
       <div className="p-4 grid lg:grid-cols-2 gap-4">
         {/* Categories */}
         <div className="space-y-3">
-          <h2 className="font-semibold flex items-center gap-2">
-            <Trophy className="w-5 h-5 text-yellow-500" /> Kategori Hadiah
+          <h2 className="font-semibold flex items-center gap-2 text-[#1E293B]">
+            <Trophy className="w-5 h-5 text-[#F59E0B]" /> Kategori Hadiah
           </h2>
           {categories.map(cat => (
             <button
@@ -200,20 +211,20 @@ export function ControlPage({ eventId }: ControlPageProps) {
               disabled={isRolling}
               className={`w-full text-left p-4 rounded-xl border-2 transition ${
                 selectedCategory?.id === cat.id
-                  ? 'border-purple-500 bg-purple-50'
-                  : 'border-gray-200 bg-white hover:border-purple-200'
+                  ? 'border-[#3B82F6] bg-[#3B82F6]/5'
+                  : 'border-[#E2E8F0] bg-white hover:border-[#3B82F6]/30'
               } ${isRolling ? 'opacity-50' : ''}`}
             >
-              <p className="font-semibold">{cat.name}</p>
-              <p className="text-sm text-gray-500">{cat.description}</p>
+              <p className="font-semibold text-[#1E293B]">{cat.name}</p>
+              <p className="text-sm text-[#64748B]">{cat.description}</p>
               <div className="flex gap-4 mt-2 text-sm">
-                <span className="text-purple-600 flex items-center gap-1">
+                <span className="text-[#3B82F6] flex items-center gap-1">
                   <Trophy className="w-4 h-4" /> {cat.winner_count}
                 </span>
-                <span className="text-blue-600 flex items-center gap-1">
+                <span className="text-[#22C55E] flex items-center gap-1">
                   <Users className="w-4 h-4" /> {cat.eligible_count}
                 </span>
-                {cat.is_completed && <span className="text-green-600">✓ Selesai</span>}
+                {cat.is_completed && <span className="text-[#22C55E]">✓ Selesai</span>}
               </div>
             </button>
           ))}
@@ -221,57 +232,63 @@ export function ControlPage({ eventId }: ControlPageProps) {
 
         {/* Controls */}
         <div className="space-y-4">
-          <h2 className="font-semibold">Kontrol Pengundian</h2>
+          <h2 className="font-semibold text-[#1E293B]">Kontrol Pengundian</h2>
 
           {selectedCategory ? (
-            <div className="bg-white rounded-xl border p-6 space-y-4">
-              <div className="bg-purple-50 rounded-lg p-4">
-                <p className="text-sm text-gray-500">Kategori Aktif</p>
-                <p className="text-xl font-bold">{selectedCategory.name}</p>
-                <p className="text-gray-600">{selectedCategory.description}</p>
+            <div className="bg-white rounded-xl border border-[#E2E8F0] p-6 space-y-4">
+              <div className="bg-[#3B82F6]/5 rounded-lg p-4 border border-[#3B82F6]/20">
+                <p className="text-sm text-[#64748B]">Kategori Aktif</p>
+                <p className="text-xl font-bold text-[#1E293B]">{selectedCategory.name}</p>
+                <p className="text-[#64748B]">{selectedCategory.description}</p>
               </div>
 
               <button
                 onClick={handleStartDrawing}
                 disabled={isRolling || selectedCategory.is_completed}
-                className="w-full py-4 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2"
+                className="w-full py-4 bg-[#22C55E] hover:bg-[#16A34A] text-white font-semibold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2 transition"
               >
                 <Play className="w-6 h-6" />
-                {isRolling ? 'Mengundi...' : 'Mulai Pengundian'}
+                {isRolling ? 'Mengundi...' : 'MULAI'}
               </button>
 
               <button
-                onClick={handleForceStop}
+                onClick={handleStopDrawing}
                 disabled={!isRolling}
-                className="w-full py-4 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2"
+                className="w-full py-4 bg-[#EF4444] hover:bg-[#DC2626] text-white font-semibold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2 transition"
               >
-                <Square className="w-6 h-6" /> Stop
+                <Square className="w-6 h-6" /> STOP
               </button>
 
               <button
                 onClick={handleReset}
                 disabled={isRolling || !selectedCategory.winners?.length}
-                className="w-full py-3 border-2 border-gray-300 hover:border-gray-400 rounded-xl disabled:opacity-50 flex items-center justify-center gap-2"
+                className="w-full py-3 border-2 border-[#E2E8F0] hover:border-[#64748B] rounded-xl disabled:opacity-50 flex items-center justify-center gap-2 transition text-[#1E293B]"
               >
                 <RotateCcw className="w-5 h-5" /> Reset Kategori
               </button>
 
-              {/* Winners */}
+              {/* Winners - Compact List Format */}
               {selectedCategory.winners && selectedCategory.winners.length > 0 && (
                 <div className="space-y-2">
-                  <h3 className="font-semibold">Pemenang</h3>
+                  <h3 className="font-semibold text-[#1E293B]">Pemenang</h3>
                   {selectedCategory.winners.map(w => (
-                    <div key={w.id} className="flex items-center justify-between p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-yellow-400 text-white rounded-full flex items-center justify-center font-bold">
+                    <div key={w.id} className="flex items-center justify-between p-3 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg hover:border-[#22C55E] transition">
+                      <div className="flex items-center gap-3 flex-1">
+                        <div className="w-8 h-8 bg-[#22C55E] text-white rounded-full flex items-center justify-center font-bold text-sm">
                           {w.position}
                         </div>
-                        <div>
-                          <p className="font-semibold">{w.participant.name}</p>
-                          <p className="text-sm text-gray-500 font-mono">{w.participant.coupon_code}</p>
+                        <div className="flex-1">
+                          <span className="font-mono text-[#3B82F6] font-semibold text-sm">{w.participant.coupon_code}</span>
+                          <span className="text-[#64748B] mx-2">-</span>
+                          <span className="font-semibold text-[#1E293B] text-sm">{w.participant.name}</span>
                         </div>
                       </div>
-                      <button onClick={() => handleReroll(w.id)} disabled={isRolling} className="p-2 text-orange-600 hover:bg-orange-100 rounded-lg">
+                      <button 
+                        onClick={() => handleReroll(w.id)} 
+                        disabled={isRolling} 
+                        className="p-2 text-[#F59E0B] hover:bg-[#F59E0B]/10 rounded-lg transition"
+                        title="Reroll"
+                      >
                         <RefreshCw className="w-5 h-5" />
                       </button>
                     </div>
@@ -280,9 +297,9 @@ export function ControlPage({ eventId }: ControlPageProps) {
               )}
             </div>
           ) : (
-            <div className="bg-white rounded-xl border p-8 text-center">
-              <Trophy className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500">Pilih kategori untuk memulai</p>
+            <div className="bg-white rounded-xl border border-[#E2E8F0] p-8 text-center">
+              <Trophy className="w-12 h-12 text-[#64748B] mx-auto mb-4" />
+              <p className="text-[#64748B]">Pilih kategori untuk memulai</p>
             </div>
           )}
         </div>
