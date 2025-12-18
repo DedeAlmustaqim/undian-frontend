@@ -145,7 +145,8 @@ export function ControlPage({ eventId, onBack }: ControlPageProps) {
       alert(`Berhasil import ${res.data.imported_count} peserta`);
       const participantsRes = await participantApi.getAll(eventId);
       setParticipants(participantsRes.data);
-    } catch {
+    } catch (error) {
+      console.error('Failed to import:', error);
       alert('Gagal import');
     }
   };
